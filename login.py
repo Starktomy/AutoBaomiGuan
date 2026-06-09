@@ -1,44 +1,73 @@
-import requests
-import rsa
 import base64
-from Crypto.PublicKey import RSA
+import logging
+
+import requests
+from colorama import Fore, Style
 from Crypto.Cipher import PKCS1_v1_5
+from Crypto.PublicKey import RSA
+
+
+def rsa_encrypt_pkcs1v15(data: str, public_key: str) -> str:
+    """RSA 加密（PKCS#1 v1.5），公钥支持 PEM 或纯 Base64 格式。"""
+    if not public_key.strip().startswith("-----BEGIN"):
+        public_key = f"""-----BEGIN PUBLIC KEY-----
+{public_key.strip()}
+-----END PUBLIC KEY-----"""
+
+    try:
+        key = RSA.import_key(public_key)
+        cipher = PKCS1_v1_5.new(key)
+        encrypted_bytes = cipher.encrypt(data.encode())
+        return base64.b64encode(encrypted_bytes).decode()
+    except (ValueError, IndexError, TypeError) as e:
+        raise ValueError("无效的公钥格式") from e
+
 
 def encrypt(data):
-    # 获取公钥
-    key_url = 'https://www.baomi.org.cn/portal/main-api/getPublishKey.do'
-    response = requests.get(key_url)
-    public_key = response.json()['data']
-    
-    # 将Base64编码的公钥转换为PEM格式
-    pem_key = "-----BEGIN PUBLIC KEY-----\n"
-    # 每64个字符添加一个换行符
-    for i in range(0, len(public_key), 64):
-        pem_key += public_key[i:i+64] + "\n"
-    pem_key += "-----END PUBLIC KEY-----"
-    
-    # 将PEM格式的公钥转换为RSA对象
-    key = RSA.import_key(pem_key)
-    # 创建加密器
-    cipher = PKCS1_v1_5.new(key)
-    # 加密数据
-    encrypted_data = cipher.encrypt(data.encode())
-    # 将加密后的数据转换为base64字符串
-    return base64.b64encode(encrypted_data).decode()
+    try:
+        key_url = "https://www.baomi.org.cn/portal/main-api/getPublishKey.do"
+        response = requests.get(key_url)
+        if response.status_code != 200:
+            logging.error(f"{Fore.RED}获取公钥失败，状态码: {response.status_code}{Style.RESET_ALL}")
+            return None
+
+        public_key = response.json()["data"]
+        return rsa_encrypt_pkcs1v15(data, public_key)
+    except Exception as e:
+        logging.error(f"{Fore.RED}加密过程出错: {e}{Style.RESET_ALL}")
+        raise Exception(f"加密数据失败: {e}") from e
+
 
 def login(loginName, passWord):
-    login_url = "https://www.baomi.org.cn/portal/main-api/loginInNew.do"
-    payload = {
-        "loginName": encrypt(loginName),
-        "passWord": encrypt(passWord),
-        "deviceId": 1711,
-        "deviceOs": "pc",
-        "lon": 40,
-        "lat": 30,
-        "siteId": "95",
-        "sinopec": 'false'
-    }
+    try:
+        login_url = "https://www.baomi.org.cn/portal/main-api/loginInNew.do"
+        payload = {
+            "loginName": encrypt(loginName),
+            "passWord": encrypt(passWord),
+            "deviceId": 1711,
+            "deviceOs": "pc",
+            "lon": 40,
+            "lat": 30,
+            "siteId": "95",
+            "sinopec": "false",
+        }
 
-    response = requests.post(login_url, json=payload)
-    token = response.json()['token']
-    return token
+        headers = {
+            "Content-Type": "application/json",
+            "siteId": "95",
+        }
+        response = requests.post(login_url, json=payload, headers=headers)
+        if response.status_code != 200:
+            logging.error(f"{Fore.RED}登录请求失败，状态码: {response.status_code}{Style.RESET_ALL}")
+            raise Exception(f"登录请求失败，状态码: {response.status_code}")
+
+        response_data = response.json()
+        if "token" not in response_data:
+            error_msg = response_data.get("message", "未知错误")
+            logging.error(f"{Fore.RED}登录失败: {error_msg}{Style.RESET_ALL}")
+            raise Exception(f"登录失败: {error_msg}")
+
+        return response_data["token"]
+    except Exception as e:
+        logging.error(f"{Fore.RED}登录过程出错: {e}{Style.RESET_ALL}")
+        raise
