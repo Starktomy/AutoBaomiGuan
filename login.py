@@ -23,27 +23,39 @@ def rsa_encrypt_pkcs1v15(data: str, public_key: str) -> str:
         raise ValueError("无效的公钥格式") from e
 
 
-def encrypt(data):
+def encrypt(data, log_callback=None):
+    def log_msg(msg):
+        if log_callback:
+            log_callback(msg)
+        else:
+            logging.error(msg)
+
     try:
         key_url = "https://www.baomi.org.cn/portal/main-api/getPublishKey.do"
         response = requests.get(key_url)
         if response.status_code != 200:
-            logging.error(f"{Fore.RED}获取公钥失败，状态码: {response.status_code}{Style.RESET_ALL}")
+            log_msg(f"{Fore.RED}获取公钥失败，状态码: {response.status_code}{Style.RESET_ALL}")
             return None
 
         public_key = response.json()["data"]
         return rsa_encrypt_pkcs1v15(data, public_key)
     except Exception as e:
-        logging.error(f"{Fore.RED}加密过程出错: {e}{Style.RESET_ALL}")
+        log_msg(f"{Fore.RED}加密过程出错: {e}{Style.RESET_ALL}")
         raise Exception(f"加密数据失败: {e}") from e
 
 
-def login(loginName, passWord):
+def login(loginName, passWord, log_callback=None):
+    def log_msg(msg):
+        if log_callback:
+            log_callback(msg)
+        else:
+            logging.error(msg)
+
     try:
         login_url = "https://www.baomi.org.cn/portal/main-api/loginInNew.do"
         payload = {
-            "loginName": encrypt(loginName),
-            "passWord": encrypt(passWord),
+            "loginName": encrypt(loginName, log_callback),
+            "passWord": encrypt(passWord, log_callback),
             "deviceId": 1711,
             "deviceOs": "pc",
             "lon": 40,
@@ -58,16 +70,17 @@ def login(loginName, passWord):
         }
         response = requests.post(login_url, json=payload, headers=headers)
         if response.status_code != 200:
-            logging.error(f"{Fore.RED}登录请求失败，状态码: {response.status_code}{Style.RESET_ALL}")
+            log_msg(f"{Fore.RED}登录请求失败，状态码: {response.status_code}{Style.RESET_ALL}")
             raise Exception(f"登录请求失败，状态码: {response.status_code}")
 
         response_data = response.json()
         if "token" not in response_data:
             error_msg = response_data.get("message", "未知错误")
-            logging.error(f"{Fore.RED}登录失败: {error_msg}{Style.RESET_ALL}")
+            log_msg(f"{Fore.RED}登录失败: {error_msg}{Style.RESET_ALL}")
             raise Exception(f"登录失败: {error_msg}")
 
         return response_data["token"]
     except Exception as e:
-        logging.error(f"{Fore.RED}登录过程出错: {e}{Style.RESET_ALL}")
+        log_msg(f"{Fore.RED}登录过程出错: {e}{Style.RESET_ALL}")
         raise
+
