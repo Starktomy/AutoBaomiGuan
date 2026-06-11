@@ -87,28 +87,16 @@ def task_worker(task_id, username, password):
         
         # Step 3: Check progress
         set_task_step(task_id, "progress")
-        log_task(task_id, "开始验证学习进度，请稍候...")
+        log_task(task_id, "开始获取当前学习进度...")
         progress = course_manager.get_course_progress(course_packet_id)
         if progress and progress.get("data"):
             data = progress["data"]
             log_task(task_id, f"当前学习进度: {data['progressRate'] * 100:.1f}%")
             log_task(task_id, f"已学课程数: {data['studyResourceNum']}/{data['resourceSum']}")
-            
-            if not data['isFinish']:
-                log_task(task_id, "检测到学习进度未达 100%，正在启动补刷机制...")
-                course_manager.study_course(course_packet_id)
-                
-                # Check again
-                progress = course_manager.get_course_progress(course_packet_id)
-                if progress and progress.get("data"):
-                    data = progress["data"]
-                    log_task(task_id, f"补刷后进度: {data['progressRate'] * 100:.1f}%")
-                    if not data['isFinish']:
-                        raise Exception("课程进度未达 100%，请尝试重新刷课")
         else:
-            raise Exception("获取课程进度失败，无法验证是否已完成学习")
+            log_task(task_id, "警告: 无法获取学习进度，将继续进入考试阶段")
             
-        log_task(task_id, "学习进度验证通过，全部课程已学完。")
+        log_task(task_id, "学习进度检查完成。")
 
         # Step 4: Take the exam
         set_task_step(task_id, "exam")
